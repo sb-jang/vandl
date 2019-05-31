@@ -1,6 +1,7 @@
 import os
 import numpy as np
 from PIL import Image
+import unicodedata
 
 # type: list(str)
 # get a list of all users
@@ -20,9 +21,9 @@ def getUserImageNames(user):
     imageList = list(filter(lambda x: '.jpg' in x or '.jpeg' in x, fileList))
     return imageList
 
-# type: list(str)
-# get a list of all comments written on an image written by a user
-def getUserComments(user, image):
+# type: str
+# get the comment written on an image written by a user
+def getUserComment(user, image):
     imagePath = './data/' + user + '/' + image
     assert os.path.exists(imagePath)
 
@@ -34,15 +35,13 @@ def getUserComments(user, image):
         print "Error: not jpg or jpeg"
         exit()
 
-    comments = []
-    cnt = 0
-    while os.path.exists('./data/' + user + '/' + shortCode + '.' + str(cnt)):
-        commentPath = './data/' + user + '/' + shortCode + '.' + str(cnt)
-        with open(commentPath, 'r') as f:
-            line = eval(f.readline())
-            comments.append(line[0])
-        cnt += 1
-    return comments
+    #while os.path.exists('./data/' + user + '/' + shortCode + '.comment'):
+    commentPath = './data/' + user + '/' + shortCode + '.0'
+    with open(commentPath, 'r') as f:
+        line = eval(f.readline())
+        comment = unicode2str(line[0])
+        #comment = line[0]
+    return comment
 
 # type: (weight(int), height(int))
 # get the size of an image
@@ -60,11 +59,19 @@ def showImage(user, image):
 
 # type: np.array (width, height, rgb))
 # get image as an array
-def getImageArray(user, image):
+def getImageArray(user, image, resize=True):
     imagePath = './data/' + user + '/' + image
     im = Image.open(imagePath)
     imageArray = np.array(im)
+
+    if resize:
+        imageArray = np.array(Image.fromarray(imageArray).resize((224, 224), Image.ANTIALIAS))
+
     return imageArray
+
+def unicode2str(uni):
+    uni = unicodedata.normalize('NFKD', uni).encode('ascii', 'ignore')
+    return str(uni)
 
 # type: str or None
 # get post with user and image name
@@ -79,13 +86,15 @@ def getPost(user, imagePath):
             line = f.readline()
             line = eval(line)
             assert len(line) == 1
-            text = line[0]
+            text = unicode2str(line[0])
+            #text = line[0]
+
     else:
-        return None
+        return ''
     return text.strip()
 
-# type: list(str)
-# get a list of tags with user and image name
+# type: str
+# get the tags with user and image name (delimiter: space)
 def getTags(user, imagePath):
     if '.jpg' in imagePath:
         image = imagePath.split('.jpg')[0]
@@ -95,10 +104,16 @@ def getTags(user, imagePath):
     if os.path.exists(tagPath):
         with open(tagPath, 'r') as f:
             line = eval(f.readline())
-            tags = line
+            if len(line) == 0:
+                tags = ''
+            else:
+                tags = ' '.join(list(map(lambda x: str(x), line)))
+                #tags = ' '.join(list(map(lambda x: x, line)))
     else:
-        return None
+        return ''
     return tags
 
 def tagReplace(comment):
-    return ' '.join(map(lambda x: '@TAG' if x[0] == '@' else x, comment.split(' ')))
+    if comment is '':
+        return ''
+    return ' '.join(map(lambda x: '@TAG' if len(x) > 0 and x[0] == '@' else x, comment.split(' ')))
