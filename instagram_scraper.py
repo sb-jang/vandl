@@ -1,6 +1,7 @@
 # need to install instagram-scraper (pip install instagram-scraper)
 
 #from InstagramAPI import InstagramAPI
+from __future__ import print_function
 import fnmatch
 import os
 import subprocess
@@ -57,16 +58,16 @@ def get_close_users(random_user):
 def insta_json_scrap(user):
 	if not os.path.exists("./" + user):
 		os.system("instagram-scraper " + user + " -u a -p b --comments -t none -T {shortcode} --retry-forever")
-		print '' 
+		print ('')
 
 
 def insta_scrap(user):
 	#si.wShowWindow = subprocess.SW_HIDE # default
 	#if not os.path.exists("./" + user):
-	print user + " processing.."
+	print (user + " processing..")
 	os.system("instagram-scraper " + user + " -u a -p b --comments -T {shortcode} --retry-forever -q > dummy.txt")
 	#subprocess.call("instagram-scraper " + user + " -u a -p b --comments -T {shortcode} --retry-forever -q > dummy.txt")
-	print user + " finished"
+	print (user + " finished")
 	#print '' 
 
 
@@ -90,7 +91,7 @@ def filter_images(random_user, close_user, min_num_words):
 			words = comment["text"].strip().split(' ')
 			words = list(filter(lambda x: len(x) > 0, words))
 			if comment["owner"]["username"] == random_user and len(words) >= min_num_words:
-				print "File " + file_name + " selected"
+				print ("File " + file_name + " selected")
 				#os.system("rm -rf ./" + close_user + "/" + file_name + "*")
 				if not os.path.exists("./final_dataset/" + close_user):
 					os.makedirs("./final_dataset/" + close_user)
@@ -134,7 +135,7 @@ def delete_all_images(close_users):
 			json_file = open("./" + close_user + "/" + close_user + ".json")
 			json_data = json.loads(json_file.read())
 			json_data = json_data["GraphImages"]
-			print "All files of " + close_user + " were deleted"
+			print ("All files of " + close_user + " were deleted")
 			os.system("rm -rf ./" + close_user)
 			# for data in json_data:
 			# 	file_name = data["shortcode"]
@@ -202,7 +203,7 @@ data_user = []
 while True:
 	# Select next random user from queue
 	random_user = user_queue.get()
-	print "\nRandom user: " + random_user
+	print ("\nRandom user: " + random_user)
 	# Dismiss the user already selected
 	if random_user in selected_users:
 		continue
@@ -214,7 +215,7 @@ while True:
 		#os.system("sleep 10")
 		num_posts = get_num_posts(random_user)
 		if num_posts == -1 or num_posts > max_num_posts:
-			print "Skip " + random_user
+			print ("Skip " + random_user)
 			continue
 
 		insta_scrap(random_user)
@@ -224,7 +225,7 @@ while True:
 			continue
 
 		# If one's comments on oneself are less than threshold, skip the user
-		print "num_comments_oneself: " + str(num_comments_oneself(random_user))
+		print ("num_comments_oneself: " + str(num_comments_oneself(random_user)))
 		if num_comments_oneself(random_user) < min_num_comments_oneself:
 			continue
 
@@ -237,7 +238,7 @@ while True:
 		#os.system("sleep 10")
 		num_posts = get_num_posts(close_user)
 		if num_posts == -1 or num_posts > max_num_posts:
-			print "Skip " + close_user
+			print ("Skip " + close_user)
 			continue
 		if not os.path.exists("./" + close_user):
 			proc = Process(target=insta_scrap, args=(close_user,))
@@ -254,7 +255,7 @@ while True:
 			proc.join()
 
 
-	print "Scrap finished"
+	print ("Scrap finished")
 
 	for close_user in close_users:
 		# Skip private users
@@ -264,7 +265,7 @@ while True:
 		num_random_user_comments = get_num_random_user_comments(close_user, random_user, min_num_words)
 		total_num_random_user_commments += num_random_user_comments
 
-	print "Total num comments of " + random_user + ": " + str(total_num_random_user_commments)
+	print ("Total num comments of " + random_user + ": " + str(total_num_random_user_commments))
 	
 	if total_num_random_user_commments >= min_num_comments:
 		data_user.append(random_user)
@@ -282,8 +283,8 @@ while True:
 			filter_images(random_user, close_user, min_num_words)
 	# else:
 	# 	delete_all_images(close_users)
-	print "** Selected users: " + str(data_user)
-	print "** Total num comments: " + str(total_num_comments)
+	print ("** Selected users: " + str(data_user))
+	print ("** Total num comments: " + str(total_num_comments))
 	with open("output.txt", "w") as f:
 		f.write(str(data_user))
 		f.write('\n')

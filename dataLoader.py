@@ -1,3 +1,5 @@
+from __future__ import print_function
+
 import torch
 from torch.utils.data import Dataset
 from utils import *
@@ -18,6 +20,7 @@ class InstagramDataset(Dataset):
         self.post_data = []
         self.tag_data = []
         self.user_data = []
+        self.user_comments = {}
 
         self.imageFiles = {}
         for user in self.users:
@@ -28,7 +31,7 @@ class InstagramDataset(Dataset):
                 for imageFile in imageFiles:
                     post = tagReplace(getPost(user, imageFile))
                     tags = getTags(user, imageFile)
-                    comment = getUserComment(user, imageFile)
+                    comment = getComment(user, imageFile)
                     imageArray = getImageArray(user, imageFile, resize=True)
 
                     self.image_data.append(imageArray)
@@ -55,6 +58,18 @@ class InstagramDataset(Dataset):
         self.num_images = sum(map(lambda x: len(self.imageFiles[x]), self.users))
         self.num_data = len(self.comment_data)
 
+        for user in self.users:
+            self.user_comments[user] = []
+            imageFiles = self.imageFiles[user]
+            commentFiles = list(map(lambda x: x.replace('.jpg', '.0'), imageFiles))
+            commentFiles = list(map(lambda x: x.replace('.jpeg', '.0'), commentFiles))
+            for commentFile in commentFiles:
+                with open(self.root_path + user + '/' + commentFile, 'r') as f:
+                    line = eval(f.readline())
+                    comment = unicode2str(line[0]).lower()
+                    self.user_comments[user].append(comment)
+
+
     def __len__(self):
         return self.num_data
 
@@ -69,3 +84,10 @@ class InstagramDataset(Dataset):
         sample = {'user': self.user_data[idx], 'image': self.image_data[idx], 'post': self.post_data[idx], 'tags': self.tag_data[idx], 'comment': self.comment_data[idx]}
         return sample
         #return self.user_data[idx], self.image_data[idx], self.post_data[idx], self.tag_data[idx], self.comment_data[idx]
+
+    def getAllUsersComments(self, users):
+        all_comments = []
+        for user in users:
+            assert user in self.user_comments
+            all_comments.append(self.user_comments[user])
+        return all_comments

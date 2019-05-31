@@ -1,3 +1,5 @@
+from __future__ import print_function
+
 import numpy as np
 
 from utils import *
@@ -21,11 +23,11 @@ arr = getImageArray(users[1], image)
 
 comments = getUserComments(users[1], image)
 for comment in comments:
-    print tagReplace(comment)
-print users[1]
+    print (tagReplace(comment))
+print (users[1])
 post = getPost(users[1], image)
-print tagReplace(post)
+print (tagReplace(post))
 tags = getTags(users[1], image)
-print tags
+print (tags)
 
 

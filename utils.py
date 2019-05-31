@@ -1,3 +1,4 @@
+from __future__ import print_function
 import os
 import numpy as np
 from PIL import Image
@@ -32,7 +33,7 @@ def getUserComment(user, image):
     elif '.jpeg' in image:
         shortCode = image.split('.jpeg')[0]
     else:
-        print "Error: not jpg or jpeg"
+        print ("Error: not jpg or jpeg")
         exit()
 
     #while os.path.exists('./data/' + user + '/' + shortCode + '.comment'):
@@ -48,7 +49,7 @@ def getUserComment(user, image):
 def getImageSize(user, image):
     imagePath = './data/' + user + '/' + image
     im = Image.open(imagePath)
-    print im.size
+    return im.size
 
 # type: None
 # show the image

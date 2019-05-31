@@ -1,3 +1,4 @@
+from __future__ import print_function
 import chars2vec
 import numpy as np
 #from utils import *
@@ -7,7 +8,7 @@ import numpy as np
 # models: eng_50, eng_100, eng_150, eng_200, eng_300
 def getCommentEmbeddings(model_name, comments):
 	if not model_name in ['eng_50', 'eng_100', 'eng_150', 'eng_200', 'eng_300']:
-		print "Error: arguments 'model' should be one of eng_50, eng_100, eng_150, eng_200, and eng_300"
+		print ("Error: arguments 'model' should be one of eng_50, eng_100, eng_150, eng_200, and eng_300")
 
 	c2v_model = chars2vec.load_model(model_name)
 	comments = list(map(lambda x: x.strip(), comments))
