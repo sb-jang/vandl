@@ -1,13 +1,13 @@
-from __future__ import print_function
+from __future__ import unicode_literals, print_function, division
+
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import json
-from torchvision import models
+from torchvision import models, transforms
 from allennlp.modules.elmo import Elmo, batch_to_ids
+import nltk
 
-data_dir = "./data/"
-batch_size = 10
-num_epochs = 20
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 def set_parameter_requires_grad(model, feature_extracting):
@@ -64,83 +64,100 @@ def get_post_feature(post):
 
 	return embedding
 
-# Hashtag model part
+img_transforms = transforms.Compose([
+		transforms.Resize(224),
+		transforms.ToTensor(),
+		transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+		])
+def get_embedding(image, post, tags, img_embedder, img_layer, char_embedder):
+	# Extract image feature
+	img = img_transforms(image)
+	img_feature = get_img_feature(img, img_embedder, img_layer)
 
-# class CharacterLevelCNN(nn.Module):
-# 	def __init__(self, args):
-# 		super(CharacterLevelCNN, self).__init__()
+	# Extract post feature
+	tokenized_post = nltk.word_tokenize(post)
+	post_feature = get_post_feature(tokenized_post)
+	post_feature = torch.tensor(post_feature, device=device)
 
-# 		# Load configuration such as model parameters
-# 		with open(args.config_path) as f:
-# 			self.config = json.load(f)
+	# Extract hashtag feature
+	tokenized_tags = tags.split(' ')
+	hashtag_feature = char_embedder.vectorize_words(tokenized_tags)
+	hashtag_feature = torch.tensor(hashtag_feature, device=device)
 
-# 		# Creating conv layers
-# 		conv_layers = []
-# 		for i, conv_layer_parameter in enumerate(self.config['model_parameters'][args.size]['conv']):
-# 			if i == 0: # first conv layer
-# 				in_channels = args.number_of_characters + len(args.extra_characters)
-# 				out_channels = conv_layer_parameter[0]
-# 			else: # other conv layers
-# 				in_channels, out_channels = conv_layer_parameter[0], conv_layer_parameter[0]
+	return (img_feature, post_feature, hashtag_feature)
 
-# 			if conv_layer_parameter[2] != -1: # layers with pooling
-# 				conv_layer = nn.Sequential(nn.Conv1d(in_channels, out_channels,
-# 					kernel_size=conv_layer_parameter[1], padding=0),
-# 				nn.ReLU(), nn.MaxPool1d(conv_layer_parameter[2]))
-# 			else: # layers without pooling
-# 				conv_layer = nn.Sequential(nn.Conv1d(in_channels, out_channels,
-# 					kernel_size=conv_layer_parameter[1], padding=0),
-# 				nn.ReLU())
-# 			conv_layers.append(conv_layer)
-# 		self.conv_layers = nn.ModuleList(conv_layers)
+# seq2seq model part
 
-# 		input_shape = (args.batch_size, args_max_length,
-# 			args.number_of_characters + len(args.extra_characters))
-# 		dimension = self._get_conv_output(input_shape)
+class Encoder(nn.Module):
+	def __init__(self, input_size, hidden_size):
+		super(Encoder, self).__init__()
+		self.hidden_size = hidden_size
 
-# 		print('dimension :', dimension)
+		# self.fc_img = nn.Linear(input_size[0], hidden_size)
+		# self.fc_post = nn.Linear(input_size[1], hidden_size)
+		# self.fc_hash = nn.Linear(input_size[2], hidden_size)
+		self.fc = nn.Linear(sum(input_size), hidden_size)
 
-# 		# Creating fc layers
-# 		fc_layer_parameter = self.config['model_parameters'][args.size]['fc'][0]
-# 		fc_layers = nn.ModuleList([
-# 			nn.Sequential(
-# 				nn.Linear(dimension, fc_layer_parameter), nn.Dropout(0.5)),
-# 			nn.Sequential(
-# 				nn.Linear(fc_layer_parameter, fc_layer_parameter), nn.Dropout(0.5)),
-# 			nn.Linear(fc_layer_parameter, args_number_of_classes),])
-# 		self.fc_layers = fc_layers
+	def forward(self, input):
+		input = torch.cat((input[0], input[1], input[2]), 0)
+		embedded = input.view(1, 1, -1)
+		output = embedded
+		output = self.fc(output)
+		output = F.relu(output)
+		return output
 
-# 		if args.size == 'small':
-# 			self._create_weights(mean=0.0, std=0.05)
-# 		elif args.size == 'large':
-# 			self._create_weights(mean=0.0, std=0.02)
+class DecoderRNN(nn.Module):
+	def __init__(self, hidden_size, output_size):
+		super(DecoderRNN, self).__init__()
+		self.hidden_size = hidden_size
 
-# 	# Initialize weights for conv and fc layers
-# 	def _create_weights(self, mean=0.0, std=0.05):
-# 		for module in self.modules():
-# 			if isinstance(module, nn.Conv1d) or isinstance(module, nn.Linear):
-# 				module.weight.data.normal_(mean, std)
+		self.embedding = nn.Embedding(output_size, hidden_size)
+		self.gru = nn.GRU(hidden_size, hidden_size)
+		self.out = nn.Linear(hidden_size, output_size)
+		self.softmax = nn.LogSoftmax(dim=1)
 
-# 	def _get_conv_output(self, shape):
-# 		input = torch.rand(shape)
-# 		output= input.transpose(1, 2)
-# 		# forward pass through conv layers
-# 		for i in range(len(self.conv_layers)):
-# 			output = self.conv_layers[i](output)
+	def forward(self, input, hidden):
+		output = self.embedding(input).view(1, 1, -1)
+		output = F.relu(output)
+		output, hidden = self.gru(output, hidden)
+		output = self.softmax(self.out(output[0]))
+		return output, hidden
 
-# 		output = output.view(output.size(0), -1)
-# 		n_size = output.size(1)
-# 		return n_size
+	def initHidden(self):
+		return torch.zeros(1, 1, self.hidden_size, device=device)
 
-# 	def forward(self, input):
-# 		output = input.transpose(1, 2)
-# 		# forward pass through conv layers
-# 		for i in range(len(self.conv_layers)):
-# 			output = self.conv_layers[i](output)
+MAX_LENGTH = 10
+class AttnDecoderRNN(nn.Module):
+	def __init__(self, hidden_size, output_size, dropout_p=0.1, max_length=MAX_LENGTH):
+		super(AttnDecoderRNN, self).__init__()
+		self.hidden_size = hidden_size
+		self.output_size = output_size
+		self.dropout_p = dropout_p
+		self.max_length = max_length
 
-# 		output = output.view(output.size(0), -1)
+		self.embedding = nn.Embedding(self.output_size, self.hidden_size)
+		self.attn = nn.Linear(self.hidden_size * 2, self.max_length)
+		self.attn_combine = nn.Linear(self.hidden_size * 2, self.hidden_size)
+		self.dropout = nn.Dropout(self.dropout_p)
+		self.gru = nn.GRU(self.hidden_size, self.hidden_size)
+		self.out = nn.Linear(self.hidden_size, self.output_size)
 
-# 		# forward pass through fc layers
-# 		for i in range(len(self.fc_layers)):
-# 			output = self.fc_layers[i](output)
-# 		return output
+	def forward(self, input, hidden, encoder_outputs):
+		embedded = self.embedding(input).view(1, 1, -1)
+		embedded = self.dropout(embedded)
+
+		attn_weights = F.softmax(
+			self.attn(torch.cat((embedded[0], hidden[0]), 1)), dim=1)
+		attn_applied = torch.bmm(attn_weights.unsqueeze(0), encoder_outputs.unsqueeze(0))
+
+		output = torch.cat((embedded[0], attn_applied[0]), 1)
+		output = self.attn_combine(output).unsqueeze(0)
+
+		output = F.relu(output)
+		output, hidden = self.gru(output, hidden)
+
+		output = F.log_softmax(self.out(output[0]), dim=1)
+		return output, hidden, attn_weights
+
+	def initHidden(self):
+		return torch.zeros(1, 1, self.hidden_size, device=device)
