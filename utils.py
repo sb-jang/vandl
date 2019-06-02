@@ -24,7 +24,7 @@ def getUserImageNames(user):
 
 # type: str
 # get the comment written on an image written by a user
-def getUserComment(user, image):
+def getComment(user, image):
     imagePath = './data/' + user + '/' + image
     assert os.path.exists(imagePath)
 
