@@ -31,7 +31,7 @@ def getUserComments(user, image):
     elif '.jpeg' in image:
         shortCode = image.split('.jpeg')[0]
     else:
-        print "Error: not jpg or jpeg"
+        print("Error: not jpg or jpeg")
         exit()
 
     comments = []
@@ -49,7 +49,7 @@ def getUserComments(user, image):
 def getImageSize(user, image):
     imagePath = './data/' + user + '/' + image
     im = Image.open(imagePath)
-    print im.size
+    print(im.size)
 
 # type: None
 # show the image
