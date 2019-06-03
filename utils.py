@@ -3,6 +3,7 @@ import os
 import numpy as np
 from PIL import Image
 import unicodedata
+from keras.preprocessing import image
 
 # type: list(str)
 # get a list of all users
@@ -60,15 +61,23 @@ def showImage(user, image):
 
 # type: np.array (width, height, rgb))
 # get image as an array
-def getImageArray(user, image, resize=True):
-    imagePath = './data/' + user + '/' + image
-    im = Image.open(imagePath)
-    imageArray = np.array(im)
+# def getImageArray(user, image, resize=True):
+#     imagePath = './data/' + user + '/' + image
+#     im = Image.open(imagePath)
+#     imageArray = np.array(im)
 
-    if resize:
-        imageArray = np.array(Image.fromarray(imageArray).resize((224, 224), Image.ANTIALIAS))
+#     if resize:
+#         imageArray = np.array(Image.fromarray(imageArray).resize((224, 224), Image.ANTIALIAS))
 
+#     return imageArray
+
+def getImageArray(user, imageFile, resize=True):
+    imagePath = './data/' + user + '/' + imageFile
+    imageData = image.load_img(imagePath, target_size = (224, 224))
+    #imageArray = image.img_to_array(imageData)
+    imageArray = np.asarray(imageData)
     return imageArray
+
 
 def unicode2str(uni):
     uni = unicodedata.normalize('NFKD', uni).encode('ascii', 'ignore')
@@ -108,7 +117,7 @@ def getTags(user, imagePath):
             if len(line) == 0:
                 tags = ''
             else:
-                tags = ' '.join(list(map(lambda x: str(x), line)))
+                tags = ' '.join(list(map(lambda x: unicode2str(x), line)))
                 #tags = ' '.join(list(map(lambda x: x, line)))
     else:
         return ''
