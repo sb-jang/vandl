@@ -1,3 +1,4 @@
+from __future__ import print_function
 import chars2vec
 import numpy as np
 #from utils import *
@@ -7,12 +8,24 @@ import numpy as np
 # models: eng_50, eng_100, eng_150, eng_200, eng_300
 def getCommentEmbeddings(model_name, comments):
 	if not model_name in ['eng_50', 'eng_100', 'eng_150', 'eng_200', 'eng_300']:
-		print "Error: arguments 'model' should be one of eng_50, eng_100, eng_150, eng_200, and eng_300"
+		print ("Error: arguments 'model' should be one of eng_50, eng_100, eng_150, eng_200, and eng_300")
+		exit()
+		
+	if type(comments[0]) == str:
+		c2v_model = chars2vec.load_model(model_name)
+		comments = list(map(lambda x: x.strip(), comments))
+		comment_embeddings = c2v_model.vectorize_words(comments)
+		return comment_embeddings
 
-	c2v_model = chars2vec.load_model(model_name)
-	comments = list(map(lambda x: x.strip(), comments))
-	comment_embeddings = c2v_model.vectorize_words(comments)
-	return comment_embeddings
+	elif type(comments[0][0]) == str:
+		comments_embeddings = []
+		for comments_ in comments:
+			c2v_model = chars2vec.load_model(model_name)
+			comments_ = list(map(lambda x: x.strip(), comments_))
+			comment_embeddings = c2v_model.vectorize_words(comments_)
+			comments_embeddings.append(comment_embeddings)
+		return comments_embeddings
+		
 
 # type: dict{str(ngram): int(count)}
 # get ngram count dictionary
@@ -41,23 +54,54 @@ def getKMostCommonNgram(ngram_count, k=1):
 	return k_key, k_value
 
 
-# type: np.array(dim), float32
-# get an embedding of comment, after aubtracting k most common ngram embeddings
-def subtractCommonNgrams(model_name, comment, k_key):
-	n = len(k_key[0])
+# # type: np.array(dim), float32 // list(np.array(dim)), float32
+# # get an embedding of comment, after aubtracting k most common ngram embeddings
+# def getStylizedEmbeddings(model_name, comment, gramDict, dataset):
+# 	n = len(gramDict.keys()[0])
 
-	common_ngrams = []
+# 	if type(comment) == str:
+# 		common_ngram_embeddings = []
 
-	comment = comment.strip()
-	for ngram_index in range(len(comment[:-n+1])):
-		ngram = comment[ngram_index:ngram_index+n]
-		if ngram in k_key:
-			common_ngrams.append(ngram)
+# 		comment = comment.strip()
+# 		for ngram_index in range(len(comment[:-n+1])):
+# 			ngram = comment[ngram_index:ngram_index+n]
+# 			if ngram in gramDict:
+# 				common_ngram_embeddings.append(gramDict[ngram])
 
-	common_embeddings = getCommentEmbeddings(model_name, common_ngrams)
-	comment_embedding = getCommentEmbeddings(model_name, [comment])[0]
+# 		comment_embedding = getCommentEmbeddings(model_name, [comment])[0]
 
-	for common_embedding in common_embeddings:
-		comment_embedding = np.subtract(comment_embedding, common_embedding)
+# 		for common_ngram_embedding in common_ngram_embeddings:
+# 			comment_embedding = np.subtract(comment_embedding, common_ngram_embedding)
+# 		return comment_embedding
 
-	return comment_embedding
+# 	elif type(comment) == list and type(comment[0]) == list and type(comment[0][0]) == str:
+# 		comment_embeddings = []
+# 		for userComments in comment:
+# 			avgUserComments = []
+# 			for userComment in userComments:
+# 				print (userComment)
+# 				common_ngram_embeddings = []
+# 				print(1)
+# 				userComment = userComment.strip()
+# 				for ngram_index in range(len(userComment[:-n+1])):
+# 					ngram = userComment[ngram_index:ngram_index+n]
+# 					if ngram in gramDict:
+# 						common_ngram_embeddings.append(gramDict[ngram])
+# 				print(2)
+# 				comment_embedding = getCommentEmbeddings(model_name, [userComment])[0]
+# 				print(3)
+# 				if len(common_ngram_embeddings) > 0:
+# 					for common_ngram_embedding in common_ngram_embeddings:
+# 						comment_embedding = np.subtract(comment_embedding, common_ngram_embedding)
+# 				print(4)
+# 				avgUserComments.append(comment_embedding)
+# 			dataset.setUserStyleEmbeddings(np.mean(avgUserComments, axis=0))
+
+# 			raw_input() 
+# 		return comment_embeddings
+
+# 	else:
+# 		print (type(comment))
+# 		print (type(comment[0]))
+# 		print (type(comment[0][0]))
+# 		exit()

@@ -5,25 +5,35 @@ from torch.utils.data import Dataset
 from utils import *
 import os
 import numpy as np
+import time
+
+from comment_processor import *
+
 class InstagramDataset(Dataset):
     """Face Landmarks dataset."""
 
-    def __init__(self):
+    def __init__(self, num_users=None):
         self.root_path = './data/'
 
         for _, users_, _ in os.walk(self.root_path):
-            self.users = users_
+            if num_users is not None:
+                self.users = users_[:num_users]
+            else:
+                self.users = users_
             break
-
+        #self.users = list(filter(lambda x: 'a' <= x[0] and x[0] <= 'e', self.users))
         self.image_data = []
         self.comment_data = []
         self.post_data = []
         self.tag_data = []
         self.user_data = []
         self.user_comments = {}
+        self.user_style_embedding = {}
 
         self.imageFiles = {}
         for user in self.users:
+            start = time.time()
+            print (user)
             user_path = self.root_path + user
             for _, _, files in os.walk(user_path):
                 imageFiles = list(filter(lambda x: '.jpg' in x or '.jpeg' in x, files))
@@ -47,7 +57,8 @@ class InstagramDataset(Dataset):
                     # print type(self.user_data[0])
 
                     # raw_input( )
-
+            print("time :", time.time() - start)
+        
         # print self.comment_data
         # raw_input()
         # print self.post_data
@@ -88,6 +99,68 @@ class InstagramDataset(Dataset):
     def getAllUsersComments(self, users):
         all_comments = []
         for user in users:
+            # print (user)
             assert user in self.user_comments
             all_comments.append(self.user_comments[user])
         return all_comments
+
+    def getUserStyleEmbedding(self, user, model_name, gramDict):
+        n = len(gramDict.keys()[0])
+
+        if type(user) == str:
+            if not user in self.user_style_embedding or not n in self.user_style_embedding[user]:
+                self.setUserStyleEmbedding(user, model_name, gramDict)
+            return self.user_style_embedding[user][n]
+
+        elif type(user) == list and type(user[0]) == str:
+            embeddings = []
+            for user_ in user:
+                if not user_ in self.user_style_embedding or not n in self.user_style_embedding[user_]:
+                    self.setUserStyleEmbedding(user_, model_name, gramDict)
+                embeddings.append(self.user_style_embedding[user_][n]            )
+            return embeddings
+
+        else:
+            print("Error")
+            exit(0)
+
+    def setUserStyleEmbedding(self, user, model_name, gramDict):
+        n = len(gramDict.keys()[0])
+
+        if not user in self.user_style_embedding:
+            self.user_style_embedding[user] = {}
+
+        userComments = self.getAllUsersComments([user])[0]
+        print (userComments)
+        avgUserComments = []
+        for userComment in userComments:
+            common_ngram_embeddings = []
+            userComment = userComment.strip()
+            if len(userComment) == 0:
+                continue
+            for ngram_index in range(len(userComment[:-n+1])):
+                ngram = userComment[ngram_index:ngram_index+n]
+                if ngram in gramDict:
+                    common_ngram_embeddings.append(gramDict[ngram])
+            print (userComment)
+            comment_embedding = getCommentEmbeddings(model_name, [userComment])[0]
+            if len(common_ngram_embeddings) > 0:
+                for common_ngram_embedding in common_ngram_embeddings:
+                    comment_embedding = np.subtract(comment_embedding, common_ngram_embedding)
+            avgUserComments.append(comment_embedding)
+        self.user_style_embedding[user][n] = np.mean(avgUserComments, axis=0)
+
+    def saveUserCommentEmbedding(self, user, model_name):
+        print ("Saving " + user)
+        userComments = self.getAllUsersComments([user])[0]
+        if len(userComments) == 0:
+            return
+        userEmbeddings = getCommentEmbeddings(model_name, userComments)
+
+        with open("./embeddingCache/" + user + ".emb", 'w') as f:
+            for c, e in zip(userComments, userEmbeddings):
+                f.write(str(c))
+                f.write('\n')
+                f.write(str(e.tolist()))
+                f.write('\n')
+
