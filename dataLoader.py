@@ -65,7 +65,7 @@ class InstagramDataset(Dataset):
             cnt += 1
 
             if int(float(cnt) / len(self.users) * 100) % 10 == 0:
-                print str(int(float(cnt) / len(self.users) * 100)) + '% reading completed'
+                print (str(int(float(cnt) / len(self.users) * 100)) + '% reading completed')
         # print self.comment_data
         # raw_input()
         # print self.post_data

@@ -18,7 +18,7 @@ import pdb
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-dataset = dataLoader.InstagramDataset('train')
+dataset = dataLoader.InstagramDataset('train') # 'val'
 data_size = dataset.__len__()
 batch_size = 8
 
@@ -227,5 +227,5 @@ def evaluateRandomly(encoder, decoder, n=10):
 encoder = model.Encoder(input_size, hidden_size).to(device)
 decoder = model.DecoderRNN(hidden_size, vocab.n_words).to(device)
 
-trainIters(encoder, decoder)
+trainIters(encoder, decoder, learning_rate=0.0001)
 evaluateRandomly(encoder, decoder, 10)
