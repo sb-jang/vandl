@@ -31,9 +31,9 @@ class InstagramDataset(Dataset):
         self.user_style_embedding = {}
 
         self.imageFiles = {}
+        print ("Reading user information")
+        cnt = 0
         for user in self.users:
-            start = time.time()
-            print (user)
             user_path = self.root_path + user
             for _, _, files in os.walk(user_path):
                 imageFiles = list(filter(lambda x: '.jpg' in x or '.jpeg' in x, files))
@@ -57,8 +57,10 @@ class InstagramDataset(Dataset):
                     # print type(self.user_data[0])
 
                     # raw_input( )
-            print("time :", time.time() - start)
-        
+            cnt += 1
+
+            if int(float(cnt) / len(self.users) * 100) % 10 == 0:
+                print str(int(float(cnt) / len(self.users) * 100)) + '% reading completed'
         # print self.comment_data
         # raw_input()
         # print self.post_data
