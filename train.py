@@ -8,14 +8,13 @@ import torchvision
 from torchvision import datasets, models, transforms
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
-import time
-import math
-import os
+import time, math, os, random
 import copy
 import utils, model, dataLoader
 from torch.utils.data import DataLoader
 import chars2vec
 import nltk
+import pdb
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -25,8 +24,10 @@ batch_size = 8
 
 img_model, img_layer = model.get_img_model()
 c2v_model = chars2vec.load_model('eng_50')
+input_size = [512, 1024, 50]
 
 hidden_size = 256
+MAX_LENGTH = 10
 
 SOS_token = 0
 EOS_token = 1
@@ -56,7 +57,7 @@ class Vocab:
 def prepareData(data):
 	vocab = Vocab('comments')
 	print("Reading data...")
-	data_loader = DataLoader(dataset=data, batch_size=dataset_size, shuffle=False)
+	data_loader = DataLoader(dataset=data, batch_size=data_size, shuffle=False)
 	for d in data_loader:
 		print("Read %d sentences" % len(d['comment']))
 		print("Counting words...")
@@ -99,28 +100,41 @@ def train(input_tensors, target_tensor, encoder, decoder, encoder_optimizer,
 
 	if use_teacher_forcing:
 		for di in range(target_length):
-			decoder_output, decoder_hidden, decoder_attention = decoder(
-				decoder_input, decoder_hidden, encoder_output)
-			loss += criterion(decoder_output, target[di])
-			decoder_input = target[di]
-
+			decoder_output, decoder_hidden = decoder(decoder_input, decoder_hidden)
+			loss += criterion(decoder_output, target_tensor[di])
+			decoder_input = target_tensor[di]
 	else:
 		for di in range(target_length):
-			decoder_output, decoder_hidden, decoder_attention = decoder(
-				decoder_input, decoder_hidden, encoder_output)
+			decoder_output, decoder_hidden = decoder(decoder_input, decoder_hidden)
 			topv, topi = decoder_output.topk(1)
 			decoder_input = topi.squeeze().detach()
 
-			loss += criterion(decoder_output, target[di])
+			loss += criterion(decoder_output, target_tensor[di])
 			if decoder_input.item() == EOS_token:
 				break
 
 	loss.backward()
-	optimizer.step()
+	encoder_optimizer.step()
+	decoder_optimizer.step()
 
 	return loss.item() / target_length
+"""
+Helper functions to print time elapsed and estimated time remaining
+given the current time and progress %
+"""
+def asMinutes(s):
+    m = math.floor(s / 60)
+    s -= m * 60
+    return '%dm %ds' % (m, s)
 
-def trainIters(encoder, decoder, print_every=1000, plot_every=100, learning_rate=0.01):
+def timeSince(since, percent):
+    now = time.time()
+    s = now - since
+    es = s / (percent)
+    rs = es - s
+    return '%s (- %s)' % (asMinutes(s), asMinutes(rs))
+
+def trainIters(encoder, decoder, print_every=5, plot_every=5, learning_rate=0.01):
 	start = time.time()
 	plot_losses = []
 	print_loss_total = 0 # Reset every print_every
@@ -132,10 +146,11 @@ def trainIters(encoder, decoder, print_every=1000, plot_every=100, learning_rate
 
 	train_loader = DataLoader(dataset=dataset, batch_size=batch_size, shuffle=True)
 
-	n_iters = dataset_size // batch_size
+	n_iters = data_size // batch_size
 	cnt = 0
 	for d in train_loader:
-		for i in range(bach_size):
+		# pdb.set_trace()
+		for i in range(len(d['image'])):
 			input_tensors = model.get_embedding(d['image'][i], d['post'][i], d['tags'][i],
 				img_model, img_layer, c2v_model)
 			target_tensor = tensorFromSentence(vocab, d['comment'][i])
@@ -146,11 +161,12 @@ def trainIters(encoder, decoder, print_every=1000, plot_every=100, learning_rate
 			plot_loss_total += loss
 
 		cnt += 1
+		print("Training completed for %d batches." % cnt)
 
 		if cnt % print_every == 0:
 			print_loss_avg = print_loss_total / print_every
 			print_loss_total = 0
-			print('(%d %d%%) %.4f' % (timeSince(start, cnt / n_iters),
+			print('%s (%d %d%%) %.4f' % (timeSince(start, cnt / n_iters),
 				cnt, cnt / n_iters * 100, print_loss_avg))
 
 		if cnt % plot_every == 0:
@@ -173,7 +189,7 @@ def showPlot(points):
 def evaluate(encoder, decoder, image, post, tag, max_length=MAX_LENGTH):
 	with torch.no_grad():
 		input_tensors = model.get_embedding(image, post, tag,
-			img,model, img_layer, c2v_model)
+			img_model, img_layer, c2v_model)
 
 		encoder_output = torch.zeros(1, encoder.hidden_size, device=device)
 		encoder_output = encoder(input_tensors)
@@ -185,9 +201,7 @@ def evaluate(encoder, decoder, image, post, tag, max_length=MAX_LENGTH):
 		decoder_attentions = torch.zeros(max_length, max_length)
 
 		for di in range(max_length):
-			decoder_output, decoder_hidden, decoder_attention = decoder(
-				decoder_input, decoder_hidden, encoder_output)
-			decoder_attentions[di] = decoder_attention.data
+			decoder_output, decoder_hidden = decoder(decoder_input, decoder_hidden)
 			topv, topi = decoder_output.data.topk(1)
 			if topi.item() == EOS_token:
 				decodded_words.append('<EOS>')
@@ -197,20 +211,21 @@ def evaluate(encoder, decoder, image, post, tag, max_length=MAX_LENGTH):
 
 			decoder_input = topi.squeeze().detach()
 
-		return decoded_words, decoder_attentions[:di + 1]
+		return decoded_words
 
 def evaluateRandomly(encoder, decoder, n=10):
 	val_loader = DataLoader(dataset=dataset, batch_size=n, shuffle=True)
-	examples = val_loader[0]
-	for i in range(n):
-		output_words, attentions = evaluate(encoder, decoder,
-			examples['image'][i], examples['post'][i], examples['tags'][i])
-		output_sentence = ' '.join(output_words)
-		print('ground truth:', examples['comment'][i])
-		print('generated:', output_sentence)
+	for d in val_loader:
+		for i in range(n):
+			output_words = evaluate(encoder, decoder,
+				d['image'][i], d['post'][i], d['tags'][i])
+			output_sentence = ' '.join(output_words)
+			print('ground truth:', d['comment'][i])
+			print('generated:', output_sentence)
+		break
 
-encoder = model.Encoder(vocab.n_words, hidden_size).to(device)
-attn_decoder = model.AttnDecoderRNN(hidden_size, vocab.n_words, dropout_p=0.1).to(device)
+encoder = model.Encoder(input_size, hidden_size).to(device)
+decoder = model.DecoderRNN(hidden_size, vocab.n_words).to(device)
 
-trainIters(encoder, attn_decoder)
-evaluateRandomly(encoder, attn_decoder)
+trainIters(encoder, decoder)
+evaluateRandomly(encoder, decoder, 10)

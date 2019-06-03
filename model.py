@@ -55,36 +55,45 @@ def get_img_feature(img_tensor, model, layer):
 Input: tokenized post as a list of words
 Output: ELMo representation (1, post_len, 1024)
 """
-options_file = "https://s3-us-west-2.amazonaws.com/allennlp/models/elmo/2x4096_512_2048cnn_2xhighway/elmo_2x4096_512_2048cnn_2xhighway_options.json"
-weight_file = "https://s3-us-west-2.amazonaws.com/allennlp/models/elmo/2x4096_512_2048cnn_2xhighway/elmo_2x4096_512_2048cnn_2xhighway_weights.hdf5"
+options_file = "./elmo_2x4096_512_2048cnn_2xhighway_options.json"
+weight_file = "./elmo_2x4096_512_2048cnn_2xhighway_weights.hdf5"
 def get_post_feature(post):
 	elmo = Elmo(options_file, weight_file, 1, dropout=0)
+	print(post)
 	character_ids = batch_to_ids(post)
 	embedding = elmo(character_ids)
 
-	return embedding
+	return embedding['elmo_representations'][0]
 
-img_transforms = transforms.Compose([
-		transforms.Resize(224),
-		transforms.ToTensor(),
-		transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-		])
+# img_transforms = transforms.Compose([
+# 		transforms.Resize(224),
+# 		transforms.ToTensor(),
+# 		transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+# 		])
 def get_embedding(image, post, tags, img_embedder, img_layer, char_embedder):
 	# Extract image feature
-	img = img_transforms(image)
+	img = torch.tensor(image, dtype=torch.float32)
+	img = img.permute(2, 0, 1)
 	img_feature = get_img_feature(img, img_embedder, img_layer)
 
 	# Extract post feature
-	tokenized_post = nltk.word_tokenize(post)
-	post_feature = get_post_feature(tokenized_post)
-	post_feature = torch.tensor(post_feature, device=device)
+	if post != '':
+		tokenized_post = nltk.word_tokenize(post.lower())
+		post_feature = get_post_feature(tokenized_post)
+		post_feature = torch.sum(post_feature, dim=1).squeeze()
+		post_feature = torch.sum(post_feature, dim=0).squeeze()
+	else:
+		post_feature = torch.zeros(1024)
 
 	# Extract hashtag feature
-	tokenized_tags = tags.split(' ')
-	hashtag_feature = char_embedder.vectorize_words(tokenized_tags)
-	hashtag_feature = torch.tensor(hashtag_feature, device=device)
+	if tags != '':
+		tokenized_tags = tags.split(' ')
+		hashtag_feature = char_embedder.vectorize_words(tokenized_tags)
+		hashtag_feature = torch.sum(torch.tensor(hashtag_feature), dim=0).squeeze()
+	else:
+		hashtag_feature = torch.zeros(50)
 
-	return (img_feature, post_feature, hashtag_feature)
+	return (img_feature.to(device), post_feature.to(device), hashtag_feature.to(device))
 
 # seq2seq model part
 
@@ -142,13 +151,13 @@ class AttnDecoderRNN(nn.Module):
 		self.gru = nn.GRU(self.hidden_size, self.hidden_size)
 		self.out = nn.Linear(self.hidden_size, self.output_size)
 
-	def forward(self, input, hidden, encoder_outputs):
+	def forward(self, input, hidden, encoder_output):
 		embedded = self.embedding(input).view(1, 1, -1)
 		embedded = self.dropout(embedded)
 
 		attn_weights = F.softmax(
 			self.attn(torch.cat((embedded[0], hidden[0]), 1)), dim=1)
-		attn_applied = torch.bmm(attn_weights.unsqueeze(0), encoder_outputs.unsqueeze(0))
+		attn_applied = torch.bmm(attn_weights.unsqueeze(0), encoder_output.unsqueeze(0))
 
 		output = torch.cat((embedded[0], attn_applied[0]), 1)
 		output = self.attn_combine(output).unsqueeze(0)
