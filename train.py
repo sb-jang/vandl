@@ -18,7 +18,7 @@ import pdb
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-dataset = dataLoader.InstagramDataset()
+dataset = dataLoader.InstagramDataset('train')
 data_size = dataset.__len__()
 batch_size = 8
 

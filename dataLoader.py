@@ -12,8 +12,13 @@ from comment_processor import *
 class InstagramDataset(Dataset):
     """Face Landmarks dataset."""
 
-    def __init__(self, num_users=None):
-        self.root_path = './data/'
+    def __init__(self, phase, num_users=None):
+        assert phase == 'train' or phase == 'val'
+
+        if phase == 'train':
+            self.root_path = './train_data/'
+        elif phase == 'val':
+            self.root_path = './val_data/'
 
         for _, users_, _ in os.walk(self.root_path):
             if num_users is not None:
