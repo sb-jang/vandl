@@ -81,7 +81,7 @@ def getImageArray(user, imageFile, resize=True):
 
 def unicode2str(uni):
     uni = unicodedata.normalize('NFKD', uni).encode('ascii', 'ignore')
-    return str(uni)
+    return str(uni.decode('ascii', 'ignore'))
 
 # type: str or None
 # get post with user and image name
