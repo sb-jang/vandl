@@ -5,7 +5,7 @@ from dataLoader import *
 from torch.utils.data import DataLoader
 
 
-dataset = InstagramDataset()
+dataset = InstagramDataset('train')
 allComments = dataset.getAllUsersComments(dataset.users)
 allComments = [y for x in allComments for y in x]
 _2gramCount = getNgramCount(allComments, 2)
@@ -42,7 +42,6 @@ for gram, emb in zip(_kMostCommon4gram, _kMostCommon4gramEmbeddings):
 for gram, emb in zip(_kMostCommon5gram, _kMostCommon5gramEmbeddings):
 	_5gramDict[gram] = emb
 
-
 train_loader = DataLoader(dataset=dataset, batch_size=3, shuffle=True)
 for d in train_loader:
 	print (d['user'])  # user
@@ -51,6 +50,8 @@ for d in train_loader:
 	print (d['tags'])  # tags (string, delimiter=space)
 	print (d['comment']) # comment
 
+	# user style embedding: average of (user comment - common n-grams)'s
 	print (dataset.getUserStyleEmbedding(d['user'], modelName, _5gramDict))
+	print (dataset.getUserStyleEmbedding(d['user'][0], modelName, _5gramDict))
 
-	raw_input()
+	input()

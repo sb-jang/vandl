@@ -112,24 +112,84 @@ class InstagramDataset(Dataset):
         return all_comments
 
     def getUserStyleEmbedding(self, user, model_name, gramDict):
-        n = len(gramDict.keys()[0])
+        n = len(list(gramDict.keys())[0])
+        emb_path = './embeddingCache/' + model_name + '/'
+        if os.path.exists(emb_path):
+            if type(user) == str:
+                avgUserComments = []
+                embFile = emb_path + user + '.emb'
+                assert os.path.exists(embFile)
 
-        if type(user) == str:
-            if not user in self.user_style_embedding or not n in self.user_style_embedding[user]:
-                self.setUserStyleEmbedding(user, model_name, gramDict)
-            return self.user_style_embedding[user][n]
+                with open(embFile, 'r') as f:
+                    while True:
+                        common_ngram_embeddings = []
+                        userComment = f.readline()
+                        emb = f.readline()
 
-        elif type(user) == list and type(user[0]) == str:
-            embeddings = []
-            for user_ in user:
-                if not user_ in self.user_style_embedding or not n in self.user_style_embedding[user_]:
-                    self.setUserStyleEmbedding(user_, model_name, gramDict)
-                embeddings.append(self.user_style_embedding[user_][n]            )
-            return embeddings
+                        if not userComment: break
+                        emb = eval(emb)
+                        for ngram_index in range(len(userComment[:-n+1])):
+                            ngram = userComment[ngram_index:ngram_index+n]
+                            if ngram in gramDict:
+                                common_ngram_embeddings.append(gramDict[ngram])
+
+                        comment_embedding = emb
+                        if len(common_ngram_embeddings) > 0:
+                            for common_ngram_embedding in common_ngram_embeddings:
+                                comment_embedding = np.subtract(comment_embedding, common_ngram_embedding)
+                        avgUserComments.append(comment_embedding)
+                return np.mean(avgUserComments, axis=0)
+
+            elif type(user) == list and type(user[0]) == str:
+                embeddings = []
+                for user_ in user:
+                    avgUserComments = []
+                    embFile = emb_path + user_ + '.emb'
+                    assert os.path.exists(embFile)
+
+                    with open(embFile, 'r') as f:
+                        while True:
+                            common_ngram_embeddings = []
+                            userComment = f.readline()
+                            emb = f.readline()
+                            if not userComment: break
+
+                            emb = eval(emb)
+                            for ngram_index in range(len(userComment[:-n+1])):
+                                ngram = userComment[ngram_index:ngram_index+n]
+                                if ngram in gramDict:
+                                    common_ngram_embeddings.append(gramDict[ngram])
+
+                            comment_embedding = emb
+                            if len(common_ngram_embeddings) > 0:
+                                for common_ngram_embedding in common_ngram_embeddings:
+                                    comment_embedding = np.subtract(comment_embedding, common_ngram_embedding)
+                            avgUserComments.append(comment_embedding)
+                    embeddings.append(np.mean(avgUserComments, axis=0))
+                return embeddings
+
+            else:
+                print("Error")
 
         else:
-            print("Error")
-            exit(0)
+            print ("Embeddings for " + model_name + " are not cached.")
+            exit()
+            # if type(user) == str:
+            #     if not user in self.user_style_embedding or not n in self.user_style_embedding[user]:
+            #         self.setUserStyleEmbedding(user, model_name, gramDict)
+            #     return self.user_style_embedding[user][n]
+
+            # elif type(user) == list and type(user[0]) == str:
+            #     embeddings = []
+            #     for user_ in user:
+            #         if not user_ in self.user_style_embedding or not n in self.user_style_embedding[user_]:
+            #             self.setUserStyleEmbedding(user_, model_name, gramDict)
+            #         embeddings.append(self.user_style_embedding[user_][n])
+            #     return embeddings
+
+            # else:
+            #     print("Error")
+            #     exit(0)
 
     def setUserStyleEmbedding(self, user, model_name, gramDict):
         n = len(gramDict.keys()[0])
@@ -138,7 +198,7 @@ class InstagramDataset(Dataset):
             self.user_style_embedding[user] = {}
 
         userComments = self.getAllUsersComments([user])[0]
-        print (userComments)
+
         avgUserComments = []
         for userComment in userComments:
             common_ngram_embeddings = []
@@ -149,7 +209,7 @@ class InstagramDataset(Dataset):
                 ngram = userComment[ngram_index:ngram_index+n]
                 if ngram in gramDict:
                     common_ngram_embeddings.append(gramDict[ngram])
-            print (userComment)
+
             comment_embedding = getCommentEmbeddings(model_name, [userComment])[0]
             if len(common_ngram_embeddings) > 0:
                 for common_ngram_embedding in common_ngram_embeddings:
