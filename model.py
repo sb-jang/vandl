@@ -7,6 +7,7 @@ import json
 from torchvision import models, transforms
 from allennlp.modules.elmo import Elmo, batch_to_ids
 import nltk
+import pdb
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -21,6 +22,7 @@ def get_img_model():
 	# Load the pretrained model
 	img_model = models.resnet18(pretrained=True)
 	set_parameter_requires_grad(img_model, True)
+	img_model = img_model.to(device)
 
 	# Use the model object to select the desired layer
 	layer = img_model._modules.get('avgpool')
@@ -38,7 +40,7 @@ def get_img_feature(img_tensor, model, layer):
 	img_tensor = img_tensor.unsqueeze(0)
 	# The 'avgpool' layer has an output size of 512
 	img_feature = torch.zeros(1, 512, 1, 1)
-	img_feature.to(device)
+	img_feature = img_feature.to(device)
 
 	def copy_data(m, i, o):
 		img_feature.copy_(o.data)
@@ -59,7 +61,6 @@ options_file = "./elmo_2x4096_512_2048cnn_2xhighway_options.json"
 weight_file = "./elmo_2x4096_512_2048cnn_2xhighway_weights.hdf5"
 def get_post_feature(post):
 	elmo = Elmo(options_file, weight_file, 1, dropout=0)
-	print(post)
 	character_ids = batch_to_ids(post)
 	embedding = elmo(character_ids)
 
@@ -72,7 +73,7 @@ def get_post_feature(post):
 # 		])
 def get_embedding(image, post, tags, img_embedder, img_layer, char_embedder):
 	# Extract image feature
-	img = torch.tensor(image, dtype=torch.float32)
+	img = torch.tensor(image, dtype=torch.float32, device=device)
 	img = img.permute(2, 0, 1)
 	img_feature = get_img_feature(img, img_embedder, img_layer)
 
@@ -80,37 +81,37 @@ def get_embedding(image, post, tags, img_embedder, img_layer, char_embedder):
 	if post != '':
 		tokenized_post = nltk.word_tokenize(post.lower())
 		post_feature = get_post_feature(tokenized_post)
-		post_feature = torch.sum(post_feature, dim=1).squeeze()
-		post_feature = torch.sum(post_feature, dim=0).squeeze()
+		post_feature = torch.mean(post_feature, dim=1).squeeze(1)
+		post_feature = torch.mean(post_feature, dim=0).squeeze(0)
+		post_feature = post_feature.to(device)
 	else:
-		post_feature = torch.zeros(1024)
+		post_feature = torch.zeros(1024, device=device)
 
 	# Extract hashtag feature
 	if tags != '':
 		tokenized_tags = tags.split(' ')
 		hashtag_feature = char_embedder.vectorize_words(tokenized_tags)
-		hashtag_feature = torch.sum(torch.tensor(hashtag_feature), dim=0).squeeze()
+		hashtag_feature = torch.mean(torch.tensor(hashtag_feature, device=device), dim=0).squeeze(0)
 	else:
-		hashtag_feature = torch.zeros(50)
+		hashtag_feature = torch.zeros(50, device=device)
 
-	return (img_feature.to(device), post_feature.to(device), hashtag_feature.to(device))
+	return torch.cat((img_feature, post_feature, hashtag_feature), 0)
 
 # seq2seq model part
 
 class Encoder(nn.Module):
 	def __init__(self, input_size, hidden_size):
 		super(Encoder, self).__init__()
+		self.input_size = sum(input_size)
 		self.hidden_size = hidden_size
 
 		# self.fc_img = nn.Linear(input_size[0], hidden_size)
 		# self.fc_post = nn.Linear(input_size[1], hidden_size)
 		# self.fc_hash = nn.Linear(input_size[2], hidden_size)
-		self.fc = nn.Linear(sum(input_size), hidden_size)
+		self.fc = nn.Linear(self.input_size, self.hidden_size)
 
 	def forward(self, input):
-		input = torch.cat((input[0], input[1], input[2]), 0)
-		embedded = input.view(1, 1, -1)
-		output = embedded
+		output = input.view(-1, 1, self.input_size)
 		output = self.fc(output)
 		output = F.relu(output)
 		return output
@@ -119,23 +120,21 @@ class DecoderRNN(nn.Module):
 	def __init__(self, hidden_size, output_size):
 		super(DecoderRNN, self).__init__()
 		self.hidden_size = hidden_size
+		self.output_size = output_size
 
-		self.embedding = nn.Embedding(output_size, hidden_size)
-		self.gru = nn.GRU(hidden_size, hidden_size)
-		self.out = nn.Linear(hidden_size, output_size)
-		self.softmax = nn.LogSoftmax(dim=1)
+		self.embedding = nn.Embedding(self.output_size, self.hidden_size)
+		self.gru = nn.GRU(self.hidden_size, self.hidden_size, batch_first=True)
+		self.out = nn.Linear(self.hidden_size, self.output_size)
+		self.softmax = nn.LogSoftmax(dim=2)
 
 	def forward(self, input, hidden):
-		output = self.embedding(input).view(1, 1, -1)
+		output = self.embedding(input).view(-1, 1, self.hidden_size)
 		output = F.relu(output)
 		output, hidden = self.gru(output, hidden)
-		output = self.softmax(self.out(output[0]))
+		output = self.softmax(self.out(output))
 		return output, hidden
 
-	def initHidden(self):
-		return torch.zeros(1, 1, self.hidden_size, device=device)
-
-MAX_LENGTH = 10
+MAX_LENGTH = 15
 class AttnDecoderRNN(nn.Module):
 	def __init__(self, hidden_size, output_size, dropout_p=0.1, max_length=MAX_LENGTH):
 		super(AttnDecoderRNN, self).__init__()

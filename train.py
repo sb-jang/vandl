@@ -18,16 +18,19 @@ import pdb
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-dataset = dataLoader.InstagramDataset('train') # 'val'
-data_size = dataset.__len__()
-batch_size = 8
+train_data = dataLoader.InstagramDataset('train')
+val_data = dataLoader.InstagramDataset('val')
+train_data_size = train_data.__len__()
+val_data_size = val_data.__len__()
 
 img_model, img_layer = model.get_img_model()
 c2v_model = chars2vec.load_model('eng_50')
 input_size = [512, 1024, 50]
 
+learning_rate = 0.001
 hidden_size = 256
-MAX_LENGTH = 10
+MAX_LENGTH = 15
+batch_size = 100
 
 SOS_token = 0
 EOS_token = 1
@@ -57,7 +60,7 @@ class Vocab:
 def prepareData(data):
 	vocab = Vocab('comments')
 	print("Reading data...")
-	data_loader = DataLoader(dataset=data, batch_size=data_size, shuffle=False)
+	data_loader = DataLoader(dataset=data, batch_size=train_data_size, shuffle=False)
 	for d in data_loader:
 		print("Read %d sentences" % len(d['comment']))
 		print("Counting words...")
@@ -67,7 +70,7 @@ def prepareData(data):
 
 	return vocab
 
-vocab = prepareData(dataset)
+vocab = prepareData(train_data)
 
 def indexesFromSentence(vocab, sentence):
 	return [vocab.word2index[word] for word in nltk.word_tokenize(sentence)]
@@ -134,7 +137,7 @@ def timeSince(since, percent):
     rs = es - s
     return '%s (- %s)' % (asMinutes(s), asMinutes(rs))
 
-def trainIters(encoder, decoder, print_every=5, plot_every=5, learning_rate=0.01):
+def trainIters(encoder, decoder, print_every=10, plot_every=10, learning_rate=learning_rate):
 	start = time.time()
 	plot_losses = []
 	print_loss_total = 0 # Reset every print_every
@@ -144,9 +147,9 @@ def trainIters(encoder, decoder, print_every=5, plot_every=5, learning_rate=0.01
 	decoder_optimizer = optim.SGD(decoder.parameters(), lr=learning_rate)
 	criterion = nn.NLLLoss()
 
-	train_loader = DataLoader(dataset=dataset, batch_size=batch_size, shuffle=True)
+	train_loader = DataLoader(dataset=train_data, batch_size=batch_size, shuffle=True)
 
-	n_iters = data_size // batch_size
+	n_iters = train_data_size // batch_size
 	cnt = 0
 	for d in train_loader:
 		# pdb.set_trace()
@@ -204,7 +207,7 @@ def evaluate(encoder, decoder, image, post, tag, max_length=MAX_LENGTH):
 			decoder_output, decoder_hidden = decoder(decoder_input, decoder_hidden)
 			topv, topi = decoder_output.data.topk(1)
 			if topi.item() == EOS_token:
-				decodded_words.append('<EOS>')
+				decoded_words.append('<EOS>')
 				break
 			else:
 				decoded_words.append(vocab.index2word[topi.item()])
@@ -213,8 +216,8 @@ def evaluate(encoder, decoder, image, post, tag, max_length=MAX_LENGTH):
 
 		return decoded_words
 
-def evaluateRandomly(encoder, decoder, n=10):
-	val_loader = DataLoader(dataset=dataset, batch_size=n, shuffle=True)
+def evaluateRandomly(encoder, decoder, n=20):
+	val_loader = DataLoader(dataset=val_data, batch_size=n, shuffle=True)
 	for d in val_loader:
 		for i in range(n):
 			output_words = evaluate(encoder, decoder,
@@ -227,5 +230,5 @@ def evaluateRandomly(encoder, decoder, n=10):
 encoder = model.Encoder(input_size, hidden_size).to(device)
 decoder = model.DecoderRNN(hidden_size, vocab.n_words).to(device)
 
-trainIters(encoder, decoder, learning_rate=0.0001)
-evaluateRandomly(encoder, decoder, 10)
+trainIters(encoder, decoder, learning_rate=learning_rate)
+evaluateRandomly(encoder, decoder, 30)
