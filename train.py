@@ -14,23 +14,25 @@ import utils, model, dataLoader
 from torch.utils.data import DataLoader
 import chars2vec
 import pdb
+from nltk.translate.bleu_score import sentence_bleu
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-train_data = dataLoader.InstagramDataset('train')
-val_data = dataLoader.InstagramDataset('val')
-train_data_size = train_data.__len__()
-val_data_size = val_data.__len__()
+train_dataset = dataLoader.InstagramDataset('train') # 'val' 
+val_dataset = dataLoader.InstagramDataset('val')
+
+train_data_size = train_dataset.__len__()
+val_data_size = val_dataset.__len__()
+
+batch_size = 8
 
 img_model, img_layer = model.get_img_model()
 post_model = model.get_post_model()
 c2v_model = chars2vec.load_model('eng_50')
 input_size = [512, 1024, 50]
 
-learning_rate = 0.001
 hidden_size = 256
-MAX_LENGTH = 15
-batch_size = 100
+MAX_LENGTH = 10
 
 SOS_token = 0
 EOS_token = 1
@@ -60,7 +62,7 @@ class Vocab:
 def prepareData(data):
 	vocab = Vocab('comments')
 	print("Reading data...")
-	data_loader = DataLoader(dataset=data, batch_size=train_data_size, shuffle=False)
+	data_loader = DataLoader(dataset=data, batch_size=data.__len__(), shuffle=False)
 	for d in data_loader:
 		print("Read %d sentences" % len(d['comment']))
 		print("Counting words...")
@@ -70,7 +72,7 @@ def prepareData(data):
 
 	return vocab
 
-vocab = prepareData(train_data)
+vocab = prepareData(train_dataset)
 
 def indexesFromSentence(vocab, sentence):
 	return [vocab.word2index[word] for word in sentence.split(' ')]
@@ -137,7 +139,7 @@ def timeSince(since, percent):
     rs = es - s
     return '%s (- %s)' % (asMinutes(s), asMinutes(rs))
 
-def trainIters(encoder, decoder, print_every=10, plot_every=10, learning_rate=learning_rate):
+def trainIters(encoder, decoder, print_every=5, plot_every=5, learning_rate=0.01):
 	start = time.time()
 	plot_losses = []
 	print_loss_total = 0 # Reset every print_every
@@ -147,7 +149,7 @@ def trainIters(encoder, decoder, print_every=10, plot_every=10, learning_rate=le
 	decoder_optimizer = optim.SGD(decoder.parameters(), lr=learning_rate)
 	criterion = nn.NLLLoss()
 
-	train_loader = DataLoader(dataset=train_data, batch_size=batch_size, shuffle=True)
+	train_loader = DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True)
 
 	n_iters = train_data_size // batch_size
 	cnt = 0
@@ -172,12 +174,27 @@ def trainIters(encoder, decoder, print_every=10, plot_every=10, learning_rate=le
 			print('%s (%d %d%%) %.4f' % (timeSince(start, cnt / n_iters),
 				cnt, cnt / n_iters * 100, print_loss_avg))
 
+			# Compute bleu score
+			# weights
+			# (1.0, 0, 0, 0) : unigram
+			# (0.5, 0.5, 0, 0) : bigram
+			# (0.33, 0.33, 0.33, 0): trigram
+			# (0.25, 0.25, 0.25, 0.25): quadgram
+			weights = (1.0, 0, 0, 0)
+			val_uniBLEU = evaluateScore(encoder, decoder, weights)
+			weights = (0.5, 0.5, 0, 0)
+			val_biBLEU = evaluateScore(encoder, decoder, weights)
+			print("val uniBLEU: " + str(val_uniBLEU))
+			print("val biBLEU: " + str(val_biBLEU))
+			evaluateRandomly(encoder, decoder, 'train', 3)
+			evaluateRandomly(encoder, decoder, 'val', 3)
+
 		if cnt % plot_every == 0:
 			plot_loss_avg = plot_loss_total / plot_every
 			plot_losses.append(plot_loss_avg)
 			plot_loss_total = 0
 
-	showPlot(plot_losses)
+	# showPlot(plot_losses)
 
 plt.switch_backend('agg')
 
@@ -216,8 +233,12 @@ def evaluate(encoder, decoder, image, post, tag, max_length=MAX_LENGTH):
 
 		return decoded_words
 
-def evaluateRandomly(encoder, decoder, n=20):
-	val_loader = DataLoader(dataset=val_data, batch_size=n, shuffle=True)
+def evaluateRandomly(encoder, decoder, phase, n=10):
+	if phase == 'train':
+		val_loader = DataLoader(dataset=train_dataset, batch_size=n, shuffle=True)
+	else:
+		val_loader = DataLoader(dataset=val_dataset, batch_size=n, shuffle=True)
+	print("Phase: " + phase)
 	for d in val_loader:
 		for i in range(n):
 			output_words = evaluate(encoder, decoder,
@@ -227,8 +248,22 @@ def evaluateRandomly(encoder, decoder, n=20):
 			print('generated:', output_sentence)
 		break
 
+def evaluateScore(encoder, decoder, weights):
+	val_loader = DataLoader(dataset=val_dataset, batch_size=1, shuffle=False)
+	total_score = 0
+	for d in val_loader:
+		#for i in range(n):
+		output_words = evaluate(encoder, decoder,
+			d['image'][0], d['post'][0], d['tags'][0])
+		
+		score = sentence_bleu([d['comment'][0].split(' ')], output_words, weights=weights)
+		total_score += score
+	return float(total_score) / val_data_size
+
+
+
 encoder = model.Encoder(input_size, hidden_size).to(device)
 decoder = model.DecoderRNN(hidden_size, vocab.n_words).to(device)
 
-trainIters(encoder, decoder, learning_rate=learning_rate)
-evaluateRandomly(encoder, decoder, 30)
+trainIters(encoder, decoder, learning_rate=0.0001)
+evaluateRandomly(encoder, decoder, 'val', 10)
