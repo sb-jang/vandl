@@ -21,7 +21,7 @@ class InstagramDataset(Dataset):
         elif phase == 'val':
             self.root_path = './val_data/'
 
-
+        start = time.time()
         for _, users_, _ in os.walk(self.root_path):
             if num_users is not None:
                 self.users = users_[:num_users]
@@ -88,7 +88,7 @@ class InstagramDataset(Dataset):
                     line = eval(f.readline())
                     comment = unicode2str(line[0]).lower()
                     self.user_comments[user].append(comment)
-
+        print ("Load data: " + str(time.time() - start))
 
     def __len__(self):
         return self.num_data
