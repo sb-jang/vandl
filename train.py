@@ -13,7 +13,6 @@ import copy
 import utils, model, dataLoader
 from torch.utils.data import DataLoader
 import chars2vec
-import nltk
 import pdb
 from nltk.translate.bleu_score import sentence_bleu
 
@@ -25,7 +24,7 @@ val_dataset = dataLoader.InstagramDataset('val')
 train_data_size = train_dataset.__len__()
 val_data_size = val_dataset.__len__()
 
-batch_size = 8
+batch_size = 100
 
 img_model, img_layer = model.get_img_model()
 post_model = model.get_post_model()
@@ -47,7 +46,7 @@ class Vocab:
 		self.n_words = 2 # Count SOS and EOS
 
 	def addSentence(self, sentence):
-		for word in nltk.word_tokenize(sentence):
+		for word in sentence.split(' '):
 			self.addWord(word)
 
 	def addWord(self, word):
@@ -76,7 +75,7 @@ def prepareData(data):
 vocab = prepareData(train_dataset)
 
 def indexesFromSentence(vocab, sentence):
-	return [vocab.word2index[word] for word in nltk.word_tokenize(sentence)]
+	return [vocab.word2index[word] for word in sentence.split(' ')]
 
 def tensorFromSentence(vocab, sentence):
 	indexes = indexesFromSentence(vocab, sentence)
@@ -140,7 +139,7 @@ def timeSince(since, percent):
     rs = es - s
     return '%s (- %s)' % (asMinutes(s), asMinutes(rs))
 
-def trainIters(encoder, decoder, print_every=5, plot_every=5, learning_rate=0.01):
+def trainIters(encoder, decoder, print_every=10, plot_every=10, learning_rate=0.001):
 	start = time.time()
 	plot_losses = []
 	print_loss_total = 0 # Reset every print_every

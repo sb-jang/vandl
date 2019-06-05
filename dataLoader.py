@@ -6,9 +6,7 @@ from utils import *
 import os
 import numpy as np
 import time
-import nltk
 from comment_processor import *
-from allennlp.modules.elmo import Elmo, batch_to_ids
 
 class InstagramDataset(Dataset):
     """Face Landmarks dataset."""
@@ -23,7 +21,7 @@ class InstagramDataset(Dataset):
         elif phase == 'val':
             self.root_path = './val_data/'
 
-
+        start = time.time()
         for _, users_, _ in os.walk(self.root_path):
             if num_users is not None:
                 self.users = users_[:num_users]
@@ -90,7 +88,7 @@ class InstagramDataset(Dataset):
                     line = eval(f.readline())
                     comment = unicode2str(line[0]).lower()
                     self.user_comments[user].append(comment)
-
+        print ("Load data: " + str(time.time() - start))
 
     def __len__(self):
         return self.num_data
@@ -235,32 +233,32 @@ class InstagramDataset(Dataset):
                 f.write(str(e.tolist()))
                 f.write('\n')
 
-    def savePostEmbedding(self):
-        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    # def savePostEmbedding(self):
+    #     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-        posts = list(set(self.post_data))
+    #     posts = list(set(self.post_data))
 
-        options_file = "./elmo_2x4096_512_2048cnn_2xhighway_options.json"
-        weight_file = "./elmo_2x4096_512_2048cnn_2xhighway_weights.hdf5"
+    #     options_file = "./elmo_2x4096_512_2048cnn_2xhighway_options.json"
+    #     weight_file = "./elmo_2x4096_512_2048cnn_2xhighway_weights.hdf5"
 
-        cnt = 0
-        with open("./postCache.emb", 'w') as f:
-            for post in posts:
-                if post != '':
-                    tokenized_post = nltk.word_tokenize(post.lower())
+    #     cnt = 0
+    #     with open("./postCache.emb", 'w') as f:
+    #         for post in posts:
+    #             if post != '':
+    #                 tokenized_post = nltk.word_tokenize(post.lower())
 
-                    elmo = Elmo(options_file, weight_file, 1, dropout=0)
-                    character_ids = batch_to_ids(tokenized_post)
-                    embedding = elmo(character_ids)
+    #                 elmo = Elmo(options_file, weight_file, 1, dropout=0)
+    #                 character_ids = batch_to_ids(tokenized_post)
+    #                 embedding = elmo(character_ids)
 
-                    post_feature = embedding['elmo_representations'][0]
-                    post_feature = torch.mean(post_feature, dim=1).squeeze(1)
-                    post_feature = torch.mean(post_feature, dim=0).squeeze(0)
-                    post_feature = post_feature.to(device)
-                    f.write(str(post))
-                    f.write('\n')
-                    f.write(str(post_feature.tolist()))
-                    f.write('\n')
-                cnt += 1
-                print (cnt / len(posts))
+    #                 post_feature = embedding['elmo_representations'][0]
+    #                 post_feature = torch.mean(post_feature, dim=1).squeeze(1)
+    #                 post_feature = torch.mean(post_feature, dim=0).squeeze(0)
+    #                 post_feature = post_feature.to(device)
+    #                 f.write(str(post))
+    #                 f.write('\n')
+    #                 f.write(str(post_feature.tolist()))
+    #                 f.write('\n')
+    #             cnt += 1
+    #             print (cnt / len(posts))
 

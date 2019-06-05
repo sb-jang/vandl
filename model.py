@@ -6,7 +6,6 @@ import torch.nn.functional as F
 import json
 from torchvision import models, transforms
 from allennlp.modules.elmo import Elmo, batch_to_ids
-import nltk
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 options_file = "./elmo_2x4096_512_2048cnn_2xhighway_options.json"
@@ -55,8 +54,8 @@ def get_img_feature(img_tensor, model, layer):
 # Post model part
 
 def get_post_model():
-    model = Elmo(options_file, weight_file, 1, dropout=0)
-    return model
+	model = Elmo(options_file, weight_file, 1, dropout=0)
+	return model
 """
 Input: tokenized post as a list of words
 Output: ELMo representation (1, post_len, 1024)
@@ -77,9 +76,10 @@ def get_embedding(image, post, tags, img_embedder, img_layer, post_embedder, cha
 	img = torch.tensor(image, dtype=torch.float32, device=device)
 	img = img.permute(2, 0, 1)
 	img_feature = get_img_feature(img, img_embedder, img_layer)
+
 	# Extract post feature
 	if post != '':
-		tokenized_post = nltk.word_tokenize(post.lower())
+		tokenized_post = post.split(' ')
 		post_feature = get_post_feature(tokenized_post, post_embedder)
 		post_feature = torch.mean(post_feature, dim=1).squeeze(1)
 		post_feature = torch.mean(post_feature, dim=0).squeeze(0)
