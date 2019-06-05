@@ -49,8 +49,8 @@ def getKMostCommonNgram(ngram_count, k=1):
 
 	kv = zip(key, value)
 	kv = sorted(kv, reverse=True, key=lambda x:x[1])
-	k_key = map(lambda x: x[0], kv[:k])
-	k_value = map(lambda x: x[1], kv[:k])
+	k_key = list(map(lambda x: x[0], kv[:k]))
+	k_value = list(map(lambda x: x[1], kv[:k]))
 	return k_key, k_value
 
 
