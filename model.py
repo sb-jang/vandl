@@ -7,7 +7,6 @@ import json
 from torchvision import models, transforms
 from allennlp.modules.elmo import Elmo, batch_to_ids
 import nltk
-import pdb
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -95,7 +94,7 @@ def get_embedding(image, post, tags, img_embedder, img_layer, char_embedder):
 	else:
 		hashtag_feature = torch.zeros(50, device=device)
 
-	return torch.cat((img_feature, post_feature, hashtag_feature), 0)
+	return (img_feature, post_feature, hashtag_feature)
 
 # seq2seq model part
 
@@ -111,7 +110,9 @@ class Encoder(nn.Module):
 		self.fc = nn.Linear(self.input_size, self.hidden_size)
 
 	def forward(self, input):
-		output = input.view(-1, 1, self.input_size)
+		input = torch.cat((input[0], input[1], input[2]), 0)
+		embedded = input.view(1, 1, -1)
+		output = embedded
 		output = self.fc(output)
 		output = F.relu(output)
 		return output
@@ -123,16 +124,19 @@ class DecoderRNN(nn.Module):
 		self.output_size = output_size
 
 		self.embedding = nn.Embedding(self.output_size, self.hidden_size)
-		self.gru = nn.GRU(self.hidden_size, self.hidden_size, batch_first=True)
+		self.gru = nn.GRU(self.hidden_size, self.hidden_size)
 		self.out = nn.Linear(self.hidden_size, self.output_size)
-		self.softmax = nn.LogSoftmax(dim=2)
+		self.softmax = nn.LogSoftmax(dim=1)
 
 	def forward(self, input, hidden):
-		output = self.embedding(input).view(-1, 1, self.hidden_size)
+		output = self.embedding(input).view(1, 1, -1)
 		output = F.relu(output)
 		output, hidden = self.gru(output, hidden)
-		output = self.softmax(self.out(output))
+		output = self.softmax(self.out(output[0]))
 		return output, hidden
+
+	def initHidden(self):
+		return torch.zeros(1, 1, self.hidden_size, device=device)
 
 MAX_LENGTH = 15
 class AttnDecoderRNN(nn.Module):
