@@ -9,6 +9,8 @@ from allennlp.modules.elmo import Elmo, batch_to_ids
 import nltk
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+options_file = "./elmo_2x4096_512_2048cnn_2xhighway_options.json"
+weight_file = "./elmo_2x4096_512_2048cnn_2xhighway_weights.hdf5"
 
 def set_parameter_requires_grad(model, feature_extracting):
 	if feature_extracting:
@@ -52,16 +54,16 @@ def get_img_feature(img_tensor, model, layer):
 
 # Post model part
 
+def get_post_model():
+    model = Elmo(options_file, weight_file, 1, dropout=0)
+    return model
 """
 Input: tokenized post as a list of words
 Output: ELMo representation (1, post_len, 1024)
 """
-options_file = "./elmo_2x4096_512_2048cnn_2xhighway_options.json"
-weight_file = "./elmo_2x4096_512_2048cnn_2xhighway_weights.hdf5"
-def get_post_feature(post):
-	elmo = Elmo(options_file, weight_file, 1, dropout=0)
+def get_post_feature(post, model):
 	character_ids = batch_to_ids(post)
-	embedding = elmo(character_ids)
+	embedding = model(character_ids)
 
 	return embedding['elmo_representations'][0]
 
@@ -70,16 +72,15 @@ def get_post_feature(post):
 # 		transforms.ToTensor(),
 # 		transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
 # 		])
-def get_embedding(image, post, tags, img_embedder, img_layer, char_embedder):
+def get_embedding(image, post, tags, img_embedder, img_layer, post_embedder, char_embedder):
 	# Extract image feature
 	img = torch.tensor(image, dtype=torch.float32, device=device)
 	img = img.permute(2, 0, 1)
 	img_feature = get_img_feature(img, img_embedder, img_layer)
-
 	# Extract post feature
 	if post != '':
 		tokenized_post = nltk.word_tokenize(post.lower())
-		post_feature = get_post_feature(tokenized_post)
+		post_feature = get_post_feature(tokenized_post, post_embedder)
 		post_feature = torch.mean(post_feature, dim=1).squeeze(1)
 		post_feature = torch.mean(post_feature, dim=0).squeeze(0)
 		post_feature = post_feature.to(device)

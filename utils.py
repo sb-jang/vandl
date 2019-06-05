@@ -5,6 +5,8 @@ from PIL import Image
 import unicodedata
 from keras.preprocessing import image
 
+
+
 # type: list(str)
 # get a list of all users
 def getAllUsers():
