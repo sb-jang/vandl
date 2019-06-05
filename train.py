@@ -24,12 +24,12 @@ val_dataset = dataLoader.InstagramDataset('val')
 train_data_size = train_dataset.__len__()
 val_data_size = val_dataset.__len__()
 
-batch_size = 8
+batch_size = 100
 
 img_model, img_layer = model.get_img_model()
-post_model = model.get_post_model()
+post_model = model.get_word_embedding()
 c2v_model = chars2vec.load_model('eng_50')
-input_size = [512, 1024, 50]
+input_size = [512, 300, 50]
 
 hidden_size = 256
 MAX_LENGTH = 10
@@ -139,7 +139,7 @@ def timeSince(since, percent):
     rs = es - s
     return '%s (- %s)' % (asMinutes(s), asMinutes(rs))
 
-def trainIters(encoder, decoder, print_every=5, plot_every=5, learning_rate=0.01):
+def trainIters(encoder, decoder, print_every=10, plot_every=10, learning_rate=0.001):
 	start = time.time()
 	plot_losses = []
 	print_loss_total = 0 # Reset every print_every
@@ -259,8 +259,6 @@ def evaluateScore(encoder, decoder, weights):
 		score = sentence_bleu([d['comment'][0].split(' ')], output_words, weights=weights)
 		total_score += score
 	return float(total_score) / val_data_size
-
-
 
 encoder = model.Encoder(input_size, hidden_size).to(device)
 decoder = model.DecoderRNN(hidden_size, vocab.n_words).to(device)

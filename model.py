@@ -6,10 +6,13 @@ import torch.nn.functional as F
 import json
 from torchvision import models, transforms
 from allennlp.modules.elmo import Elmo, batch_to_ids
+from gensim.models.fasttext import load_facebook_vectors
+from gensim.test.utils import datapath
+import time
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-options_file = "./elmo_2x4096_512_2048cnn_2xhighway_options.json"
-weight_file = "./elmo_2x4096_512_2048cnn_2xhighway_weights.hdf5"
+# options_file = "./elmo_2x4096_512_2048cnn_2xhighway_options.json"
+# weight_file = "./elmo_2x4096_512_2048cnn_2xhighway_weights.hdf5"
 
 def set_parameter_requires_grad(model, feature_extracting):
 	if feature_extracting:
@@ -53,19 +56,29 @@ def get_img_feature(img_tensor, model, layer):
 
 # Post model part
 
-def get_post_model():
-	model = Elmo(options_file, weight_file, 1, dropout=0)
-	return model
+# def get_post_model():
+# 	model = Elmo(options_file, weight_file, 1, dropout=0)
+# 	return model
+def get_word_embedding():
+	path = datapath("crawl-300d-2M-subword.bin")
+	start = time.time()
+	word_vectors = load_facebook_vectors(path)
+	print("Word vectors loaded in %.1f" % (time.time() - start))
+	return word_vectors
 """
 Input: tokenized post as a list of words
 Output: ELMo representation (1, post_len, 1024)
 """
-def get_post_feature(post, model):
-	character_ids = batch_to_ids(post)
-	embedding = model(character_ids)
+# def get_post_feature(post, model):
+# 	character_ids = batch_to_ids(post)
+# 	embedding = model(character_ids)
 
-	return embedding['elmo_representations'][0]
-
+# 	return embedding['elmo_representations'][0]
+def get_post_feature(post, wv):
+	word_features = []
+	for word in post:
+		word_features.append(torch.tensor(wv[word], dtype=torch.float32, device=device))
+	return torch.stack(word_features)	
 # img_transforms = transforms.Compose([
 # 		transforms.Resize(224),
 # 		transforms.ToTensor(),
@@ -80,14 +93,15 @@ def get_embedding(image, post, tags, img_embedder, img_layer, post_embedder, cha
 	# Extract post feature
 	if post != '':
 		tokenized_post = post.split(' ')
+		start = time.time()
 		post_feature = get_post_feature(tokenized_post, post_embedder)
-		post_feature = torch.mean(post_feature, dim=1).squeeze(1)
-		post_feature = torch.mean(post_feature, dim=0).squeeze(0)
-		post_feature = post_feature.to(device)
+		post_feature = torch.mean(post_feature, dim=0)
+		print(str(time.time() - start))
 	else:
-		post_feature = torch.zeros(1024, device=device)
+		post_feature = torch.zeros(300, device=device)
 
 	# Extract hashtag feature
+	tags = tags.strip() # for dummy tag ' '
 	if tags != '':
 		tokenized_tags = tags.split(' ')
 		hashtag_feature = char_embedder.vectorize_words(tokenized_tags)
