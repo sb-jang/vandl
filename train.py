@@ -13,7 +13,6 @@ import copy
 import utils, model, dataLoader
 from torch.utils.data import DataLoader
 import chars2vec
-import nltk
 import pdb
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -24,6 +23,7 @@ train_data_size = train_data.__len__()
 val_data_size = val_data.__len__()
 
 img_model, img_layer = model.get_img_model()
+post_model = model.get_post_model()
 c2v_model = chars2vec.load_model('eng_50')
 input_size = [512, 1024, 50]
 
@@ -44,7 +44,7 @@ class Vocab:
 		self.n_words = 2 # Count SOS and EOS
 
 	def addSentence(self, sentence):
-		for word in nltk.word_tokenize(sentence):
+		for word in sentence.split(' '):
 			self.addWord(word)
 
 	def addWord(self, word):
@@ -73,7 +73,7 @@ def prepareData(data):
 vocab = prepareData(train_data)
 
 def indexesFromSentence(vocab, sentence):
-	return [vocab.word2index[word] for word in nltk.word_tokenize(sentence)]
+	return [vocab.word2index[word] for word in sentence.split(' ')]
 
 def tensorFromSentence(vocab, sentence):
 	indexes = indexesFromSentence(vocab, sentence)
@@ -155,7 +155,7 @@ def trainIters(encoder, decoder, print_every=10, plot_every=10, learning_rate=le
 		# pdb.set_trace()
 		for i in range(len(d['image'])):
 			input_tensors = model.get_embedding(d['image'][i], d['post'][i], d['tags'][i],
-				img_model, img_layer, c2v_model)
+				img_model, img_layer, post_model, c2v_model)
 			target_tensor = tensorFromSentence(vocab, d['comment'][i])
 
 			loss = train(input_tensors, target_tensor, encoder, decoder,
@@ -192,7 +192,7 @@ def showPlot(points):
 def evaluate(encoder, decoder, image, post, tag, max_length=MAX_LENGTH):
 	with torch.no_grad():
 		input_tensors = model.get_embedding(image, post, tag,
-			img_model, img_layer, c2v_model)
+			img_model, img_layer, post_model, c2v_model)
 
 		encoder_output = torch.zeros(1, encoder.hidden_size, device=device)
 		encoder_output = encoder(input_tensors)
