@@ -46,9 +46,9 @@ class InstagramDataset(Dataset):
                 imageFiles = list(filter(lambda x: '.jpg' in x or '.jpeg' in x, files))
                 self.imageFiles[user] = list(imageFiles)
                 for imageFile in imageFiles:
-                    post = tagReplace(getPost(user, imageFile))
-                    tags = getTags(user, imageFile)
-                    comment = tagReplace(getComment(user, imageFile))
+                    post = tagReplace(unicode2str(getPost(user, imageFile)).lower())
+                    tags = unicode2str(getTags(user, imageFile)).lower()
+                    comment = tagReplace(unicode2str(getComment(user, imageFile)).lower())
                     imageArray = getImageArray(user, imageFile, resize=True)
 
                     self.image_data.append(imageArray)
